@@ -2,44 +2,74 @@ package ar.coschiza.temporizador
 
 import android.content.Context
 
-/** Un hito: momento (en milisegundos desde el inicio) y color (ARGB). */
-data class Hito(val ms: Long, val color: Int)
+/** Un hito: momento (en milisegundos desde el inicio), color (ARGB) y si vibra. */
+data class Hito(val ms: Long, val color: Int, val vibrar: Boolean = false)
 
 /** Estado del temporizador, guardado en el teléfono para sobrevivir si el sistema cierra la app. */
 object Temporizador {
     private const val PREFS = "temporizador"
 
     fun enMarcha(ctx: Context) = prefs(ctx).getBoolean("enMarcha", false)
+    fun pausado(ctx: Context) = enMarcha(ctx) && prefs(ctx).getBoolean("pausado", false)
     fun inicio(ctx: Context) = prefs(ctx).getLong("inicio", 0L)
+    fun nombre(ctx: Context) = prefs(ctx).getString("nombre", "") ?: ""
 
     fun hitos(ctx: Context): List<Hito> =
         (prefs(ctx).getString("hitos", "") ?: "")
             .split(";")
             .filter { it.contains(":") }
-            .map { val (ms, c) = it.split(":"); Hito(ms.toLong(), c.toLong().toInt()) }
+            .map {
+                val p = it.split(":")
+                Hito(p[0].toLong(), p[1].toLong().toInt(), p.getOrNull(2) == "1")
+            }
             .sortedBy { it.ms }
-
-    fun nombre(ctx: Context) = prefs(ctx).getString("nombre", "") ?: ""
 
     fun iniciar(ctx: Context, nombre: String, hitos: List<Hito>) {
         prefs(ctx).edit()
             .putBoolean("enMarcha", true)
+            .putBoolean("pausado", false)
             .putString("nombre", nombre)
             .putLong("inicio", System.currentTimeMillis())
-            .putString("hitos", hitos.joinToString(";") { "${it.ms}:${it.color.toLong() and 0xFFFFFFFFL}" })
-            .apply()
+            .putString("hitos", hitos.joinToString(";") {
+                "${it.ms}:${it.color.toLong() and 0xFFFFFFFFL}:${if (it.vibrar) 1 else 0}"
+            })
+            .commit()
+        Alarmas.programar(ctx)
+        Avisos.mostrarEnMarcha(ctx)
+    }
+
+    /** Congela el tiempo y cancela las alarmas pendientes. */
+    fun pausar(ctx: Context) {
+        if (!enMarcha(ctx) || pausado(ctx)) return
+        val t = transcurrido(ctx)
+        Alarmas.cancelar(ctx)
+        prefs(ctx).edit().putBoolean("pausado", true).putLong("transcurridoEnPausa", t).commit()
+        Avisos.mostrarEnMarcha(ctx)
+    }
+
+    /** Sigue desde donde quedó y reprograma las alarmas de los hitos que faltan. */
+    fun reanudar(ctx: Context) {
+        if (!pausado(ctx)) return
+        val t = prefs(ctx).getLong("transcurridoEnPausa", 0L)
+        prefs(ctx).edit()
+            .putBoolean("pausado", false)
+            .putLong("inicio", System.currentTimeMillis() - t)
+            .commit()
         Alarmas.programar(ctx)
         Avisos.mostrarEnMarcha(ctx)
     }
 
     fun detener(ctx: Context) {
         Alarmas.cancelar(ctx)
-        prefs(ctx).edit().putBoolean("enMarcha", false).apply()
+        prefs(ctx).edit().putBoolean("enMarcha", false).putBoolean("pausado", false).commit()
         Avisos.quitarTodo(ctx)
     }
 
-    fun transcurrido(ctx: Context): Long =
-        if (enMarcha(ctx)) System.currentTimeMillis() - inicio(ctx) else 0L
+    fun transcurrido(ctx: Context): Long = when {
+        !enMarcha(ctx) -> 0L
+        pausado(ctx) -> prefs(ctx).getLong("transcurridoEnPausa", 0L)
+        else -> System.currentTimeMillis() - inicio(ctx)
+    }
 
     /** Índice del último hito alcanzado, o -1 si todavía no llegó ninguno. */
     fun indiceActual(ctx: Context, transcurrido: Long = transcurrido(ctx)): Int =

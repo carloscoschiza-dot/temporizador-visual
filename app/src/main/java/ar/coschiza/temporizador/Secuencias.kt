@@ -47,7 +47,7 @@ object Secuencias {
                     nombre = o.getString("nombre"),
                     hitos = (0 until h.length()).map { j ->
                         val x = h.getJSONObject(j)
-                        Hito(x.getLong("ms"), x.getLong("color").toInt())
+                        Hito(x.getLong("ms"), x.getLong("color").toInt(), x.optBoolean("vibrar", false))
                     },
                 )
             }
@@ -73,7 +73,7 @@ object Secuencias {
         val arr = JSONArray()
         lista.forEach { s ->
             val h = JSONArray()
-            s.hitos.forEach { h.put(JSONObject().put("ms", it.ms).put("color", it.color.toLong() and 0xFFFFFFFFL)) }
+            s.hitos.forEach { h.put(JSONObject().put("ms", it.ms).put("color", it.color.toLong() and 0xFFFFFFFFL).put("vibrar", it.vibrar)) }
             arr.put(JSONObject().put("id", s.id).put("nombre", s.nombre).put("hitos", h))
         }
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(CLAVE, arr.toString()).apply()

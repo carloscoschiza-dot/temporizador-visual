@@ -35,6 +35,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -134,10 +135,18 @@ class MainActivity : ComponentActivity() {
             Text("Versión ${versionInstalada()}", fontSize = 13.sp, color = Color.Gray)
 
             if (enMarcha) {
-                EnMarcha(ahora) {
-                    Temporizador.detener(this@MainActivity)
-                    enMarcha = false
-                }
+                EnMarcha(
+                    ahora,
+                    pausado = Temporizador.pausado(this@MainActivity),
+                    alPausarOReanudar = {
+                        if (Temporizador.pausado(this@MainActivity)) Temporizador.reanudar(this@MainActivity)
+                        else Temporizador.pausar(this@MainActivity)
+                    },
+                    alDetener = {
+                        Temporizador.detener(this@MainActivity)
+                        enMarcha = false
+                    },
+                )
             } else {
                 Text("Mis secuencias", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 secuencias.forEach { s ->
@@ -163,7 +172,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun EnMarcha(ahora: Long, alDetener: () -> Unit) {
+    private fun EnMarcha(ahora: Long, pausado: Boolean, alPausarOReanudar: () -> Unit, alDetener: () -> Unit) {
         val hitos = Temporizador.hitos(this)
         val proximo = hitos.firstOrNull { it.ms > ahora }
         val total = hitos.maxOfOrNull { it.ms } ?: 0L
@@ -187,11 +196,20 @@ class MainActivity : ComponentActivity() {
                         Text(" ${Paleta.nombre(proximo.color)} a ${formatearMinSeg(proximo.ms)}", fontSize = 16.sp)
                     }
                 }
-                Button(
-                    onClick = alDetener,
-                    modifier = Modifier.fillMaxWidth().height(60.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                ) { Text("Detener", fontSize = 22.sp) }
+                if (pausado) Text("EN PAUSA", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFB8C00))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = alPausarOReanudar,
+                        modifier = Modifier.weight(1f).height(60.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (pausado) Color(0xFF2E7D32) else Color(0xFFFB8C00)),
+                    ) { Text(if (pausado) "Reanudar" else "Pausar", fontSize = 20.sp) }
+                    Button(
+                        onClick = alDetener,
+                        modifier = Modifier.weight(1f).height(60.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                    ) { Text("Detener", fontSize = 20.sp) }
+                }
             }
         }
     }
@@ -204,7 +222,7 @@ class MainActivity : ComponentActivity() {
                 s.hitos.sortedBy { it.ms }.forEach { h ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Muestra(h.color, 18)
-                        Text("  ${formatearMinSeg(h.ms)}  ${Paleta.nombre(h.color)}", fontSize = 15.sp)
+                        Text("  ${formatearMinSeg(h.ms)}  ${Paleta.nombre(h.color)}" + if (h.vibrar) "  · vibra" else "", fontSize = 15.sp)
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -230,7 +248,8 @@ class MainActivity : ComponentActivity() {
     // ---------- Editor ----------
 
     /** Fila editable: minutos y segundos como texto para poder escribir libremente. */
-    private class FilaHito(min: String, seg: String, color: Int) {
+    private class FilaHito(min: String, seg: String, color: Int, vibrar: Boolean = false) {
+        var vibrar by mutableStateOf(vibrar)
         var min by mutableStateOf(min)
         var seg by mutableStateOf(seg)
         var color by mutableIntStateOf(color)
@@ -251,7 +270,7 @@ class MainActivity : ComponentActivity() {
             mutableStateListOf<FilaHito>().apply {
                 (original?.hitos ?: listOf(Hito(5 * 60_000L, Paleta.VERDE))).sortedBy { it.ms }.forEach {
                     val s = it.ms / 1000
-                    add(FilaHito((s / 60).toString(), "%02d".format(s % 60), it.color))
+                    add(FilaHito((s / 60).toString(), "%02d".format(s % 60), it.color, it.vibrar))
                 }
             }
         }
@@ -275,8 +294,9 @@ class MainActivity : ComponentActivity() {
 
             filas.forEachIndexed { i, f ->
                 Card(Modifier.fillMaxWidth()) {
+                  Column {
                     Row(
-                        Modifier.padding(10.dp),
+                        Modifier.padding(start = 10.dp, end = 10.dp, top = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
@@ -301,6 +321,14 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = { filas.removeAt(i) }) { Text("✕", fontSize = 20.sp) }
                     }
+                    Row(
+                        Modifier.padding(start = 4.dp, bottom = 4.dp).clickable { f.vibrar = !f.vibrar },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = f.vibrar, onCheckedChange = { f.vibrar = it })
+                        Text("Vibrar en este hito")
+                    }
+                  }
                 }
             }
 
@@ -318,7 +346,7 @@ class MainActivity : ComponentActivity() {
 
             Button(
                 onClick = {
-                    val hitos = filas.map { f -> f.ms()?.let { Hito(it, f.color) } }
+                    val hitos = filas.map { f -> f.ms()?.let { Hito(it, f.color, f.vibrar) } }
                     error = when {
                         nombre.isBlank() -> "Poné un nombre a la secuencia."
                         filas.isEmpty() -> "Agregá al menos un hito."

@@ -37,13 +37,17 @@ object Avisos {
         val abrir = PendingIntent.getActivity(
             ctx, 1, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
         )
+        val pausado = Temporizador.pausado(ctx)
         val n = constructor(ctx, CANAL_MARCHA)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("Temporizador en marcha")
-            .setContentText("Tocá para abrir")
+            .setContentTitle(if (pausado) "Temporizador en pausa" else "Temporizador en marcha")
+            .setContentText(
+                if (pausado) "Detenido en " + formatear(Temporizador.transcurrido(ctx)) + " · Tocá para abrir"
+                else "Tocá para abrir"
+            )
             .setOngoing(true)
-            .setUsesChronometer(true)
-            .setShowWhen(true)
+            .setUsesChronometer(!pausado)
+            .setShowWhen(!pausado)
             .setWhen(Temporizador.inicio(ctx))
             .setContentIntent(abrir)
             .build()

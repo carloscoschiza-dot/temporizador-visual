@@ -5,7 +5,12 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.os.Build
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 
 /** Programa una alarma exacta del sistema por cada hito (funciona con la pantalla apagada). */
 object Alarmas {
@@ -44,12 +49,36 @@ object Alarmas {
             Intent(ctx, ReceptorHito::class.java).putExtra("indice", indice),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+
+    /** Dos pulsos de vibración, como alarma (para que funcione aun en modo silencio). */
+    fun vibrar(ctx: Context) {
+        val vibrador: Vibrator = if (Build.VERSION.SDK_INT >= 31)
+            ctx.getSystemService(VibratorManager::class.java).defaultVibrator
+        else @Suppress("DEPRECATION") ctx.getSystemService(Vibrator::class.java)
+        val patron = longArrayOf(0, 500, 250, 500)
+        try {
+            when {
+                Build.VERSION.SDK_INT >= 33 -> vibrador.vibrate(
+                    VibrationEffect.createWaveform(patron, -1),
+                    VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM),
+                )
+                else -> @Suppress("DEPRECATION") vibrador.vibrate(
+                    VibrationEffect.createWaveform(patron, -1),
+                    AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build(),
+                )
+            }
+        } catch (e: Exception) {
+            // Si el celular no tiene vibrador, no pasa nada.
+        }
+    }
 }
 
-/** Se ejecuta cuando llega un hito: enciende la pantalla con el color. */
+/** Se ejecuta cuando llega un hito: vibra (si corresponde) y enciende la pantalla con el color. */
 class ReceptorHito : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
-        if (!Temporizador.enMarcha(ctx)) return
+        if (!Temporizador.enMarcha(ctx) || Temporizador.pausado(ctx)) return
+        val hito = Temporizador.hitos(ctx).getOrNull(intent.getIntExtra("indice", -1))
+        if (hito?.vibrar == true) Alarmas.vibrar(ctx)
         // Si la pantalla de color ya está visible, ella misma cambia de color.
         // Si la app está abierta, la pantalla principal la muestra sola.
         if (ColorActivity.visible || MainActivity.visible) return

@@ -106,6 +106,9 @@ class ColorActivity : ComponentActivity() {
                 else "Tiempo cumplido +" + formatear(-restante),
                 color = texto, fontSize = 32.sp,
             )
+            if (Temporizador.pausado(this@ColorActivity)) {
+                Text("EN PAUSA", color = texto, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
