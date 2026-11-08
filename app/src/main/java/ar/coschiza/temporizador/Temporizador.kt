@@ -19,9 +19,12 @@ object Temporizador {
             .map { val (ms, c) = it.split(":"); Hito(ms.toLong(), c.toLong().toInt()) }
             .sortedBy { it.ms }
 
-    fun iniciar(ctx: Context, hitos: List<Hito>) {
+    fun nombre(ctx: Context) = prefs(ctx).getString("nombre", "") ?: ""
+
+    fun iniciar(ctx: Context, nombre: String, hitos: List<Hito>) {
         prefs(ctx).edit()
             .putBoolean("enMarcha", true)
+            .putString("nombre", nombre)
             .putLong("inicio", System.currentTimeMillis())
             .putString("hitos", hitos.joinToString(";") { "${it.ms}:${it.color.toLong() and 0xFFFFFFFFL}" })
             .apply()
@@ -54,4 +57,10 @@ fun formatear(ms: Long): String {
     val m = (s % 3600) / 60
     val seg = s % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, seg) else "%02d:%02d".format(m, seg)
+}
+
+/** Formato minutos:segundos sin horas (ej.: 80:00), para listas y editor. */
+fun formatearMinSeg(ms: Long): String {
+    val s = ms.coerceAtLeast(0) / 1000
+    return "%d:%02d".format(s / 60, s % 60)
 }
