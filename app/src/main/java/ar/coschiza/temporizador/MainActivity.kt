@@ -65,6 +65,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         @Volatile var visible = false
+        const val ENLACE_DESCARGA =
+            "https://github.com/carloscoschiza-dot/temporizador-visual/releases/latest/download/temporizador-visual.apk"
     }
 
     private var refrescar by mutableIntStateOf(0)
@@ -198,6 +200,9 @@ class MainActivity : ComponentActivity() {
                     enMarcha = true
                 })
             )
+            OutlinedButton(onClick = { compartirApp() }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Text("Compartir la app (WhatsApp, etc.)", fontSize = 16.sp)
+            }
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -543,6 +548,17 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
         }
+    }
+
+    /** Abre el menú de compartir de Android con el enlace de descarga. */
+    private fun compartirApp() {
+        val texto = "Temporizador Visual: temporizador silencioso que enciende la pantalla con colores " +
+            "para controlar tiempos de clases y exposiciones.\n\n" +
+            "Descargalo abriendo este enlace desde el celular Android:\n$ENLACE_DESCARGA\n\n" +
+            "Al instalar, permití \"instalar apps desconocidas\". Después, en la app, abrí " +
+            "\"Guía de configuración de este celular\"."
+        val envio = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, texto)
+        startActivity(Intent.createChooser(envio, "Compartir Temporizador Visual"))
     }
 
     private fun versionInstalada(): String =
