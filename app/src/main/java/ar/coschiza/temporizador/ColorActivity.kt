@@ -85,12 +85,15 @@ class ColorActivity : ComponentActivity() {
         LaunchedEffect(Unit) {
             while (true) {
                 ahora = Temporizador.transcurrido(this@ColorActivity)
-                delay(200)
+                delay(100)
             }
         }
         val hitos = remember { Temporizador.hitos(this) }
         val indice = hitos.indexOfLast { it.ms <= ahora }
-        val fondo = Color(if (indice >= 0) hitos[indice].color else 0xFF2E7D32.toInt())
+        val colorHito = Color(if (indice >= 0) hitos[indice].color else 0xFF2E7D32.toInt())
+        // El último hito parpadea (color / negro cada medio segundo), salvo en pausa.
+        val parpadea = indice >= 0 && indice == hitos.lastIndex && !Temporizador.pausado(this)
+        val fondo = if (parpadea && (System.currentTimeMillis() / 500) % 2 == 1L) Color.Black else colorHito
         val texto = if (fondo.luminance() > 0.5f) Color.Black else Color.White
         val total = hitos.maxOfOrNull { it.ms } ?: 0L
         val restante = total - ahora

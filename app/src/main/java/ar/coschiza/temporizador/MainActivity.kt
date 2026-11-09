@@ -69,17 +69,43 @@ class MainActivity : ComponentActivity() {
 
     private var refrescar by mutableIntStateOf(0)
 
+    /** Último hito para el que ya se mostró la pantalla de color (con la app abierta). */
+    private var ultimoMostrado = -1
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Avisos.crearCanales(this)
         pedirPermisoNotificaciones()
+        ultimoMostrado = Temporizador.indiceActual(this)
+        atenderAccesoDirecto(intent)
         setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) { App() } } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        atenderAccesoDirecto(intent)
     }
 
     override fun onResume() {
         super.onResume()
         visible = true
         refrescar++
+        AccesosDirectos.actualizar(this)
+    }
+
+    private fun iniciarSecuencia(s: Secuencia) {
+        Temporizador.iniciar(this, s.nombre, s.hitos)
+        ultimoMostrado = -1
+        editando = null
+    }
+
+    /** Si se abrió desde un acceso directo del ícono, inicia esa secuencia. */
+    private fun atenderAccesoDirecto(intent: Intent?) {
+        if (intent?.action != AccesosDirectos.ACCION) return
+        val id = intent.getLongExtra(AccesosDirectos.EXTRA_ID, -1L)
+        setIntent(Intent(this, MainActivity::class.java))
+        if (Temporizador.enMarcha(this)) return
+        Secuencias.obtener(this, id)?.let { iniciarSecuencia(it) }
     }
 
     override fun onPause() {
@@ -107,14 +133,15 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun PantallaPrincipal() {
         var enMarcha by remember { mutableStateOf(Temporizador.enMarcha(this)) }
+        var pausado by remember { mutableStateOf(Temporizador.pausado(this)) }
         var ahora by remember { mutableLongStateOf(0L) }
-        var ultimoMostrado by remember { mutableIntStateOf(Temporizador.indiceActual(this)) }
         var secuencias by remember { mutableStateOf(Secuencias.todas(this)) }
         LaunchedEffect(refrescar) { secuencias = Secuencias.todas(this@MainActivity) }
 
         LaunchedEffect(Unit) {
             while (true) {
                 enMarcha = Temporizador.enMarcha(this@MainActivity)
+                pausado = Temporizador.pausado(this@MainActivity)
                 ahora = Temporizador.transcurrido(this@MainActivity)
                 val indice = Temporizador.indiceActual(this@MainActivity, ahora)
                 // Con la app abierta, mostramos la pantalla de color nosotros mismos.
@@ -137,7 +164,7 @@ class MainActivity : ComponentActivity() {
             if (enMarcha) {
                 EnMarcha(
                     ahora,
-                    pausado = Temporizador.pausado(this@MainActivity),
+                    pausado = pausado,
                     alPausarOReanudar = {
                         if (Temporizador.pausado(this@MainActivity)) Temporizador.reanudar(this@MainActivity)
                         else Temporizador.pausar(this@MainActivity)
@@ -153,8 +180,7 @@ class MainActivity : ComponentActivity() {
                     TarjetaSecuencia(
                         s,
                         alIniciar = {
-                            Temporizador.iniciar(this@MainActivity, s.nombre, s.hitos)
-                            ultimoMostrado = -1
+                            iniciarSecuencia(s)
                             enMarcha = true
                         },
                         alEditar = { editando = s.id },
@@ -168,9 +194,7 @@ class MainActivity : ComponentActivity() {
             Spacer(Modifier.height(12.dp))
             PanelPermisos(
                 alProbar = if (enMarcha) null else ({
-                    Temporizador.iniciar(this@MainActivity, "Prueba 10 s",
-                        listOf(Hito(10_000, Paleta.VERDE, vibrar = true)))
-                    ultimoMostrado = -1
+                    iniciarSecuencia(Secuencia(0, "Prueba 10 s", listOf(Hito(10_000, Paleta.VERDE, vibrar = true))))
                     enMarcha = true
                 })
             )

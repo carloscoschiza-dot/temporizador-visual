@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.Icon
 import android.os.Build
 
 /** Notificaciones: una fija mientras corre y otra a pantalla completa para cada hito. */
@@ -50,6 +51,8 @@ object Avisos {
             .setShowWhen(!pausado)
             .setWhen(Temporizador.inicio(ctx))
             .setContentIntent(abrir)
+            .addAction(accion(ctx, if (pausado) "Reanudar" else "Pausar", ReceptorAcciones.PAUSAR_REANUDAR, 10))
+            .addAction(accion(ctx, "Detener", ReceptorAcciones.DETENER, 11))
             .build()
         publicar(ctx, ID_MARCHA, n)
     }
@@ -72,6 +75,16 @@ object Avisos {
             .setAutoCancel(true)
             .build()
         publicar(ctx, ID_HITO, n)
+    }
+
+    private fun accion(ctx: Context, titulo: String, accion: String, codigo: Int): Notification.Action {
+        val pi = PendingIntent.getBroadcast(
+            ctx, codigo, Intent(ctx, ReceptorAcciones::class.java).setAction(accion),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        return Notification.Action.Builder(
+            Icon.createWithResource(ctx, android.R.drawable.ic_media_pause), titulo, pi
+        ).build()
     }
 
     fun quitarHito(ctx: Context) = nm(ctx).cancel(ID_HITO)

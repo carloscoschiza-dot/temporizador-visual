@@ -16,7 +16,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = buildNumber
-        versionName = "0.4.$buildNumber"
+        versionName = "1.0.$buildNumber"
     }
 
     // Clave fija: permite instalar cada versión nueva encima de la anterior.
