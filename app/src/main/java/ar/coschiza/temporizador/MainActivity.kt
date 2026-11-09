@@ -166,7 +166,14 @@ class MainActivity : ComponentActivity() {
             }
 
             Spacer(Modifier.height(12.dp))
-            PanelPermisos()
+            PanelPermisos(
+                alProbar = if (enMarcha) null else ({
+                    Temporizador.iniciar(this@MainActivity, "Prueba 10 s",
+                        listOf(Hito(10_000, Paleta.VERDE, vibrar = true)))
+                    ultimoMostrado = -1
+                    enMarcha = true
+                })
+            )
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -433,7 +440,7 @@ class MainActivity : ComponentActivity() {
             PackageManager.PERMISSION_GRANTED
 
     @Composable
-    private fun PanelPermisos() {
+    private fun PanelPermisos(alProbar: (() -> Unit)?) {
         @Suppress("UNUSED_VARIABLE") val r = refrescar // vuelve a revisar al regresar de Ajustes
         val notif = tieneNotificaciones()
         val pantalla = Avisos.puedePantallaCompleta(this)
@@ -453,17 +460,37 @@ class MainActivity : ComponentActivity() {
             abrir(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
         }
 
+        val bateria = Guia.sinRestriccionBateria(this)
+        if (!bateria) BotonPermiso("Recomendado: quitar restricción de batería") {
+            abrir(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+        }
+
         TextButton(onClick = { verAjustes = !verAjustes }) {
-            Text(if (verAjustes) "Ocultar ajustes del sistema" else "Ajustes del sistema (pantalla de bloqueo, batería)")
+            Text(if (verAjustes) "Ocultar guía de configuración" else "Guía de configuración de este celular")
         }
         if (verAjustes) {
-            OutlinedButton(onClick = { abrirPermisosXiaomi() }, modifier = Modifier.fillMaxWidth()) {
-                Text("Otros permisos (pantalla de bloqueo, ventanas emergentes)")
-            }
-            OutlinedButton(onClick = {
-                abrir(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
-            }, modifier = Modifier.fillMaxWidth()) {
-                Text("Información de la app (inicio automático, batería)")
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Celular detectado: ${Guia.marcaVisible()}", fontWeight = FontWeight.Bold)
+                    Guia.pasos().forEachIndexed { i, paso -> Text("${i + 1}. $paso", fontSize = 15.sp) }
+                    if (Guia.esXiaomi()) {
+                        OutlinedButton(onClick = { abrirPermisosXiaomi() }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Abrir otros permisos (Xiaomi)")
+                        }
+                    }
+                    OutlinedButton(onClick = {
+                        abrir(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Abrir información de la app")
+                    }
+                    if (alProbar != null) {
+                        Button(onClick = alProbar, modifier = Modifier.fillMaxWidth()) {
+                            Text("Prueba de 10 segundos")
+                        }
+                        Text("Tocá la prueba, bloqueá el celular y esperá: a los 10 s debe encenderse en verde y vibrar.",
+                            fontSize = 13.sp, color = Color.Gray)
+                    }
+                }
             }
         }
     }
