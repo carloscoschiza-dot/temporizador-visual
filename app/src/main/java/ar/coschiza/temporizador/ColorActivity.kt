@@ -22,6 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -103,6 +106,14 @@ class ColorActivity : ComponentActivity() {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            val titulo = if (indice >= 0) hitos[indice].titulo else ""
+            if (titulo.isNotBlank()) {
+                Text(
+                    titulo, color = texto, fontSize = 40.sp, fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center, lineHeight = 46.sp,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                )
+            }
             Text(formatear(ahora), color = texto, fontSize = 110.sp, fontWeight = FontWeight.Bold)
             Text(
                 if (restante > 0) "Restan " + formatear(restante)

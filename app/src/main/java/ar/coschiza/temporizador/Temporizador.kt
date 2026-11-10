@@ -1,9 +1,23 @@
 package ar.coschiza.temporizador
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** Un hito: momento (en milisegundos desde el inicio), color (ARGB) y si vibra. */
-data class Hito(val ms: Long, val color: Int, val vibrar: Boolean = false)
+data class Hito(val ms: Long, val color: Int, val vibrar: Boolean = false, val titulo: String = "")
+
+fun hitosAJson(hitos: List<Hito>): JSONArray = JSONArray().apply {
+    hitos.forEach {
+        put(JSONObject().put("ms", it.ms).put("color", it.color.toLong() and 0xFFFFFFFFL)
+            .put("vibrar", it.vibrar).put("titulo", it.titulo))
+    }
+}
+
+fun hitosDeJson(arr: JSONArray): List<Hito> = (0 until arr.length()).map { j ->
+    val x = arr.getJSONObject(j)
+    Hito(x.getLong("ms"), x.getLong("color").toInt(), x.optBoolean("vibrar", false), x.optString("titulo", ""))
+}
 
 /** Estado del temporizador, guardado en el teléfono para sobrevivir si el sistema cierra la app. */
 object Temporizador {
@@ -14,8 +28,10 @@ object Temporizador {
     fun inicio(ctx: Context) = prefs(ctx).getLong("inicio", 0L)
     fun nombre(ctx: Context) = prefs(ctx).getString("nombre", "") ?: ""
 
-    fun hitos(ctx: Context): List<Hito> =
-        (prefs(ctx).getString("hitos", "") ?: "")
+    fun hitos(ctx: Context): List<Hito> {
+        val json = prefs(ctx).getString("hitosJson", null)
+        if (json != null) return try { hitosDeJson(JSONArray(json)).sortedBy { it.ms } } catch (e: Exception) { emptyList() }
+        return (prefs(ctx).getString("hitos", "") ?: "")
             .split(";")
             .filter { it.contains(":") }
             .map {
@@ -23,6 +39,7 @@ object Temporizador {
                 Hito(p[0].toLong(), p[1].toLong().toInt(), p.getOrNull(2) == "1")
             }
             .sortedBy { it.ms }
+    }
 
     fun iniciar(ctx: Context, nombre: String, hitos: List<Hito>) {
         prefs(ctx).edit()
@@ -30,9 +47,7 @@ object Temporizador {
             .putBoolean("pausado", false)
             .putString("nombre", nombre)
             .putLong("inicio", System.currentTimeMillis())
-            .putString("hitos", hitos.joinToString(";") {
-                "${it.ms}:${it.color.toLong() and 0xFFFFFFFFL}:${if (it.vibrar) 1 else 0}"
-            })
+            .putString("hitosJson", hitosAJson(hitos).toString())
             .commit()
         Alarmas.programar(ctx)
         Avisos.mostrarEnMarcha(ctx)

@@ -229,7 +229,7 @@ class MainActivity : ComponentActivity() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Próximo: ", fontSize = 16.sp)
                         Muestra(proximo.color, 20)
-                        Text(" ${Paleta.nombre(proximo.color)} a ${formatearMinSeg(proximo.ms)}", fontSize = 16.sp)
+                        Text(" " + proximo.titulo.ifBlank { Paleta.nombre(proximo.color) } + " a ${formatearMinSeg(proximo.ms)}", fontSize = 16.sp)
                     }
                 }
                 if (pausado) Text("EN PAUSA", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFB8C00))
@@ -258,7 +258,7 @@ class MainActivity : ComponentActivity() {
                 s.hitos.sortedBy { it.ms }.forEach { h ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Muestra(h.color, 18)
-                        Text("  ${formatearMinSeg(h.ms)}  ${Paleta.nombre(h.color)}" + if (h.vibrar) "  · vibra" else "", fontSize = 15.sp)
+                        Text("  ${formatearMinSeg(h.ms)}  " + h.titulo.ifBlank { Paleta.nombre(h.color) } + if (h.vibrar) "  · vibra" else "", fontSize = 15.sp)
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -284,7 +284,8 @@ class MainActivity : ComponentActivity() {
     // ---------- Editor ----------
 
     /** Fila editable: minutos y segundos como texto para poder escribir libremente. */
-    private class FilaHito(min: String, seg: String, color: Int, vibrar: Boolean = false) {
+    private class FilaHito(min: String, seg: String, color: Int, vibrar: Boolean = false, titulo: String = "") {
+        var titulo by mutableStateOf(titulo)
         var vibrar by mutableStateOf(vibrar)
         var min by mutableStateOf(min)
         var seg by mutableStateOf(seg)
@@ -306,7 +307,7 @@ class MainActivity : ComponentActivity() {
             mutableStateListOf<FilaHito>().apply {
                 (original?.hitos ?: listOf(Hito(5 * 60_000L, Paleta.VERDE))).sortedBy { it.ms }.forEach {
                     val s = it.ms / 1000
-                    add(FilaHito((s / 60).toString(), "%02d".format(s % 60), it.color, it.vibrar))
+                    add(FilaHito((s / 60).toString(), "%02d".format(s % 60), it.color, it.vibrar, it.titulo))
                 }
             }
         }
@@ -357,6 +358,12 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = { filas.removeAt(i) }) { Text("✕", fontSize = 20.sp) }
                     }
+                    OutlinedTextField(
+                        value = f.titulo, onValueChange = { f.titulo = it.take(60) },
+                        label = { Text("Aviso (opcional), ej.: Filmina costo de oportunidad") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                    )
                     Row(
                         Modifier.padding(start = 4.dp, bottom = 4.dp).clickable { f.vibrar = !f.vibrar },
                         verticalAlignment = Alignment.CenterVertically,
@@ -382,7 +389,7 @@ class MainActivity : ComponentActivity() {
 
             Button(
                 onClick = {
-                    val hitos = filas.map { f -> f.ms()?.let { Hito(it, f.color, f.vibrar) } }
+                    val hitos = filas.map { f -> f.ms()?.let { Hito(it, f.color, f.vibrar, f.titulo.trim()) } }
                     error = when {
                         nombre.isBlank() -> "Poné un nombre a la secuencia."
                         filas.isEmpty() -> "Agregá al menos un hito."
