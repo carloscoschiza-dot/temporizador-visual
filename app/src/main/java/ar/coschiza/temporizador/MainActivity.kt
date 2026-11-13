@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -36,6 +37,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -54,7 +56,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -94,6 +98,21 @@ class MainActivity : ComponentActivity() {
         refrescar++
         AccesosDirectos.actualizar(this)
     }
+
+    /** Mientras corre: la app se ve sobre el bloqueo y, si se eligió, la pantalla queda encendida. */
+    private fun ajustarVentana(enMarcha: Boolean, encendida: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(enMarcha)
+        } else {
+            @Suppress("DEPRECATION")
+            if (enMarcha) window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+            else window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+        }
+        if (enMarcha && encendida) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    private fun ajustes() = getSharedPreferences("ajustes", MODE_PRIVATE)
 
     private fun iniciarSecuencia(s: Secuencia) {
         Temporizador.iniciar(this, s.nombre, s.hitos)
@@ -155,6 +174,31 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        var encendida by remember { mutableStateOf(ajustes().getBoolean("pantallaEncendida", false)) }
+        LaunchedEffect(enMarcha, encendida) { ajustarVentana(enMarcha, encendida) }
+
+        if (enMarcha) {
+            BackHandler { moveTaskToBack(true) }
+            PantallaReloj(
+                ahora,
+                pausado = pausado,
+                encendida = encendida,
+                alCambiarEncendida = {
+                    encendida = it
+                    ajustes().edit().putBoolean("pantallaEncendida", it).apply()
+                },
+                alPausarOReanudar = {
+                    if (Temporizador.pausado(this@MainActivity)) Temporizador.reanudar(this@MainActivity)
+                    else Temporizador.pausar(this@MainActivity)
+                },
+                alDetener = {
+                    Temporizador.detener(this@MainActivity)
+                    enMarcha = false
+                },
+            )
+            return
+        }
+
         Column(
             modifier = Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -163,20 +207,7 @@ class MainActivity : ComponentActivity() {
             Text("Temporizador Visual", fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Text("Versión ${versionInstalada()}", fontSize = 13.sp, color = Color.Gray)
 
-            if (enMarcha) {
-                EnMarcha(
-                    ahora,
-                    pausado = pausado,
-                    alPausarOReanudar = {
-                        if (Temporizador.pausado(this@MainActivity)) Temporizador.reanudar(this@MainActivity)
-                        else Temporizador.pausar(this@MainActivity)
-                    },
-                    alDetener = {
-                        Temporizador.detener(this@MainActivity)
-                        enMarcha = false
-                    },
-                )
-            } else {
+            run {
                 Text("Mis secuencias", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 secuencias.forEach { s ->
                     TarjetaSecuencia(
@@ -195,7 +226,7 @@ class MainActivity : ComponentActivity() {
 
             Spacer(Modifier.height(12.dp))
             PanelPermisos(
-                alProbar = if (enMarcha) null else ({
+                alProbar = ({
                     iniciarSecuencia(Secuencia(0, "Prueba 10 s", listOf(Hito(10_000, Paleta.VERDE, vibrar = true))))
                     enMarcha = true
                 })
@@ -207,46 +238,89 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Pantalla negra tipo protector: tiempo gigante, visible sobre el bloqueo. */
     @Composable
-    private fun EnMarcha(ahora: Long, pausado: Boolean, alPausarOReanudar: () -> Unit, alDetener: () -> Unit) {
-        val hitos = Temporizador.hitos(this)
+    private fun PantallaReloj(
+        ahora: Long, pausado: Boolean, encendida: Boolean, alCambiarEncendida: (Boolean) -> Unit,
+        alPausarOReanudar: () -> Unit, alDetener: () -> Unit,
+    ) {
+        val hitos = remember { Temporizador.hitos(this) }
+        val actual = hitos.getOrNull(hitos.indexOfLast { it.ms <= ahora })
         val proximo = hitos.firstOrNull { it.ms > ahora }
         val total = hitos.maxOfOrNull { it.ms } ?: 0L
-        Card(Modifier.fillMaxWidth()) {
-            Column(
-                Modifier.fillMaxWidth().padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(Temporizador.nombre(this@MainActivity), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Text(formatear(ahora), fontSize = 72.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    if (total - ahora > 0) "Restan " + formatear(total - ahora)
-                    else "Tiempo cumplido +" + formatear(ahora - total),
-                    fontSize = 18.sp,
-                )
-                if (proximo != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Próximo: ", fontSize = 16.sp)
-                        Muestra(proximo.color, 20)
-                        Text(" " + proximo.titulo.ifBlank { Paleta.nombre(proximo.color) } + " a ${formatearMinSeg(proximo.ms)}", fontSize = 16.sp)
-                    }
-                }
-                if (pausado) Text("EN PAUSA", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFB8C00))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = alPausarOReanudar,
-                        modifier = Modifier.weight(1f).height(60.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (pausado) Color(0xFF2E7D32) else Color(0xFFFB8C00)),
-                    ) { Text(if (pausado) "Reanudar" else "Pausar", fontSize = 20.sp) }
-                    Button(
-                        onClick = alDetener,
-                        modifier = Modifier.weight(1f).height(60.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                    ) { Text("Detener", fontSize = 20.sp) }
+        val cifras = TextStyle(fontFeatureSettings = "tnum")
+        var confirmarDetener by remember { mutableStateOf(false) }
+
+        Column(
+            Modifier.fillMaxSize().background(Color.Black).padding(horizontal = 20.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(Temporizador.nombre(this@MainActivity), color = Color.Gray, fontSize = 18.sp)
+            if (actual != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Muestra(actual.color, 22)
+                    Text("  " + actual.titulo.ifBlank { Paleta.nombre(actual.color) }, color = Color.White,
+                        fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 }
             }
+            Spacer(Modifier.weight(1f))
+            Text(
+                formatear(ahora), color = Color.White, style = cifras,
+                fontSize = if (ahora >= 3_600_000L) 84.sp else 120.sp,
+                fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false,
+            )
+            Text(
+                if (total - ahora > 0) "Restan " + formatear(total - ahora)
+                else "Tiempo cumplido +" + formatear(ahora - total),
+                color = Color.LightGray, fontSize = 28.sp, style = cifras,
+            )
+            if (pausado) Text("EN PAUSA", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFB8C00))
+            if (proximo != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Próximo: ", color = Color.LightGray, fontSize = 18.sp)
+                    Muestra(proximo.color, 18)
+                    Text(" " + proximo.titulo.ifBlank { Paleta.nombre(proximo.color) } + " a ${formatearMinSeg(proximo.ms)}",
+                        color = Color.LightGray, fontSize = 18.sp)
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            Row(
+                Modifier.clickable { alCambiarEncendida(!encendida) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = encendida, onCheckedChange = alCambiarEncendida,
+                    colors = CheckboxDefaults.colors(uncheckedColor = Color.Gray),
+                )
+                Text("Mantener la pantalla encendida", color = Color.LightGray, fontSize = 15.sp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = alPausarOReanudar,
+                    modifier = Modifier.weight(1f).height(60.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (pausado) Color(0xFF2E7D32) else Color(0xFFFB8C00)),
+                ) { Text(if (pausado) "Reanudar" else "Pausar", fontSize = 20.sp) }
+                Button(
+                    onClick = { confirmarDetener = true },
+                    modifier = Modifier.weight(1f).height(60.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                ) { Text("Detener", fontSize = 20.sp) }
+            }
+        }
+
+        if (confirmarDetener) {
+            AlertDialog(
+                onDismissRequest = { confirmarDetener = false },
+                title = { Text("¿Detener el temporizador?") },
+                confirmButton = {
+                    TextButton(onClick = { confirmarDetener = false; alDetener() }) {
+                        Text("Detener", color = Color(0xFFC62828))
+                    }
+                },
+                dismissButton = { TextButton(onClick = { confirmarDetener = false }) { Text("Seguir") } },
+            )
         }
     }
 

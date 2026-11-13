@@ -11,7 +11,7 @@ import android.os.Build
 
 /** Notificaciones: una fija mientras corre y otra a pantalla completa para cada hito. */
 object Avisos {
-    private const val CANAL_MARCHA = "en_marcha"
+    private const val CANAL_MARCHA = "en_marcha2"
     private const val CANAL_HITO = "hitos"
     const val ID_MARCHA = 1
     const val ID_HITO = 2
@@ -20,9 +20,14 @@ object Avisos {
 
     fun crearCanales(ctx: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        // Canal nuevo con importancia normal (sin sonido) para que el tiempo se vea en la pantalla de bloqueo.
+        nm(ctx).deleteNotificationChannel("en_marcha")
         nm(ctx).createNotificationChannel(
-            NotificationChannel(CANAL_MARCHA, "Temporizador en marcha", NotificationManager.IMPORTANCE_LOW)
-                .apply { setSound(null, null) }
+            NotificationChannel(CANAL_MARCHA, "Temporizador en marcha", NotificationManager.IMPORTANCE_DEFAULT)
+                .apply {
+                    setSound(null, null); enableVibration(false)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                }
         )
         nm(ctx).createNotificationChannel(
             NotificationChannel(CANAL_HITO, "Hitos (pantalla de color)", NotificationManager.IMPORTANCE_HIGH)
@@ -47,6 +52,8 @@ object Avisos {
                 else "Tocá para abrir"
             )
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setUsesChronometer(!pausado)
             .setShowWhen(!pausado)
             .setWhen(Temporizador.inicio(ctx))
